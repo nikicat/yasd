@@ -1,23 +1,27 @@
 import logging
 import os
+from recvmmsg import recv_mmsg
 
-def recv_unix(stream, sockname, bufsize=65536, unlink=False):
+def make_unix_sock(sockname, bufsize=65536, unlink=False):
     import socket
     import os
     if unlink:
         os.remove(sockname)
     s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, bufsize)
     s.bind(sockname)
-    for _ in stream:
-        yield s.recv(bufsize)
+    return s
 
-def recv_udp(stream, port=514, bufsize=65536):
+def make_udp_sock(port=514, bufsize=65536):
     import socket
     s = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, bufsize)
     s.bind(('::', port))
+    return s
+
+def recv(stream, sock, bufsize=9000):
     for _ in stream:
-        yield s.recv(9000) # jumbo frame size
+        yield sock.recv(bufsize)
 
 def send_stdout(stream, separator=b'\n'):
     import sys
@@ -156,10 +160,12 @@ def main():
     logging.basicConfig(level=logging.DEBUG)
     #logging.getLogger('pyelasticsearch').setLevel(logging.DEBUG)
 
+    s = make_udp_sock(port=5514, bufsize=1024*1024*500)
     #x = produce_forked(processes=1)
     x = produce()
     #x = recv_unix(x, '/run/systemd/journal/syslog', unlink=True)
-    x = recv_udp(x, port=5514, bufsize=1024*1024*500)
+    #x = recv(x, s)
+    x = recv_mmsg(x, s)
     x = map(lambda msg: msg.decode(errors='ignore'), x)
     x = send_logging(x)
     x = parse_syslog(x)
