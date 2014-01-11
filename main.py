@@ -86,33 +86,21 @@ def parse_syslog_timestamp(stream):
         msg['timestamp'] = parse(msg['timestamp'])
         yield msg
 
-def multiply(stream, factor=2):
-    for msg in stream:
-        for i in range(factor):
-            yield msg
+def consume(stream):
+    for _ in stream:
+        pass
 
-def split(stream, factor=2):
-    return [stream]*factor
-
-def consume(streams, running=True):
-    while running:
-        for stream in streams:
-            next(stream)
-
-def consume_threaded(streams, workers=1):
+def consume_threaded(stream, workers=1):
     import threading
-    import multiprocessing
     threads = []
-    running = multiprocessing.Value('d', 1)
     for worker in range(workers):
-        threads.append(threading.Thread(target=consume, name='worker #{}'.format(worker), args=(streams,running)))
+        threads.append(threading.Thread(target=consume, name='worker #{}'.format(worker), args=(stream,)))
     for thread in threads:
         thread.start()
-    def stop():
-        running = 0
+    def join():
         for thread in threads:
             thread.join()
-    return stop
+    return join
 
 def rename(stream, renames):
     for msg in stream:
@@ -152,25 +140,30 @@ def send_es_bulk(stream, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:
         conn.bulk_index(index.format(**msgs[0]), type, msgs, consistency="one")
         yield msgs
 
-def produce(running=True):
-    while running:
+def produce(running):
+    logging.debug('producer started')
+    while running.value:
         yield None
+    logging.debug('producer finished')
 
-def produce_forked(processes):
+def produce_forked(processes, running):
     import os
-    import multiprocessing
     import random
     pids = []
-    running = multiprocessing.Value('d', 1)
     for i in range(processes):
         pid = os.fork()
         if pid == 0:
             random.seed()
             yield from produce(running)
+            return
         else:
             pids.append(pid)
     for pid in pids:
         os.waitpid(pid, 0)
+
+def make_running():
+    import multiprocessing
+    return multiprocessing.Value('d', 1)
 
 def decode(stream, field):
     for msg in stream:
@@ -185,21 +178,28 @@ def send_queue(stream, queue):
     for msg in stream:
         queue.put(msg)
         yield msg
+    # to avoid locking in recv_queue 
+    queue.put(None)
 
 def recv_queue(stream, queue):
     for _ in stream:
-        yield queue.get()
+        msg = queue.get()
+        if msg:
+            yield msg
 
 def main():
     logging.basicConfig(level=logging.INFO)
     #logging.getLogger('pyelasticsearch').setLevel(logging.DEBUG)
+    logging.TRACE = 5
 
     s = make_udp_sock(port=5514, bufsize=1024*1024*100)
     q = make_queue(size=1024*1024)
+    r = make_running()
 
-    x = produce_forked(processes=4)
+    x = produce_forked(processes=4, running=r)
+    #x = produce(running=r)
     x = recv_mmsg(x, s, vlen=100000)
-    x = send_logging(x)
+    x = send_logging(x, level=logging.TRACE)
     x = parse_syslog(x)
     x = parse_syslog_tag(x)
     x = filter(lambda msg: msg['programname'] == b'trapper', x)
@@ -209,20 +209,24 @@ def main():
     x = decode(x, 'msg')
     x = gen_uuid(x)
     x = rename(x, {'timestamp': '@timestamp', 'uuid': 'id'})
-    x = send_logging(x)
+    x = send_logging(x, level=logging.TRACE)
     x = send_queue(x, q)
-    stop = consume_threaded([x])
+    join_receiver = consume_threaded(x)
 
-    y = produce()
+    y = produce_forked(processes=1, running=r)
     y = recv_queue(y, q)
-    y = send_logging(y)
+    y = send_logging(y, level=logging.TRACE)
     y = group(y, count=10000, timefield='@timestamp')
     y = send_es_bulk(y, index='debug-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', servers=['http://elastic{}:9200/'.format(i) for i in range(4)], timeout=600)
     
-    try:
-        consume([y])
-    finally:
-        stop()
+    join_sender = consume_threaded(y)
+    
+    def handler(signal, frame):
+        logging.debug('catched signal, stopping...')
+        r.value = 0
+    import signal
+    signal.signal(signal.SIGINT, handler)
+    logging.info('done initialization, main thread exiting')
 
 if __name__ == '__main__':
     main()
