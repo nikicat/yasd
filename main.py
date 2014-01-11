@@ -1,6 +1,7 @@
 import logging
 import os
 from recvmmsg import recv_mmsg
+import stats
 
 def make_unix_sock(sockname, bufsize=65536, unlink=False):
     import socket
@@ -190,11 +191,13 @@ def recv_queue(stream, queue):
 def main():
     logging.basicConfig(level=logging.INFO)
     #logging.getLogger('pyelasticsearch').setLevel(logging.DEBUG)
+    logging.getLogger('graphitesend').setLevel(logging.DEBUG)
     logging.TRACE = 5
 
     s = make_udp_sock(port=5514, bufsize=1024*1024*100)
-    q = make_queue(size=1024*1024)
+    q = make_queue(size=1024*1024*50)
     r = make_running()
+    stats.getstat('queue_size').value = q.qsize
 
     x = produce_forked(processes=4, running=r)
     #x = produce(running=r)
@@ -211,7 +214,7 @@ def main():
     x = rename(x, {'timestamp': '@timestamp', 'uuid': 'id'})
     x = send_logging(x, level=logging.TRACE)
     x = send_queue(x, q)
-    join_receiver = consume_threaded(x)
+    consume_threaded(x)
 
     y = produce_forked(processes=1, running=r)
     y = recv_queue(y, q)
@@ -219,8 +222,10 @@ def main():
     y = group(y, count=10000, timefield='@timestamp')
     y = send_es_bulk(y, index='debug-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', servers=['http://elastic{}:9200/'.format(i) for i in range(4)], timeout=600)
     
-    join_sender = consume_threaded(y)
+    consume_threaded(y)
     
+    stats.startsending('graphite-shard1', 2024)
+
     def handler(signal, frame):
         logging.debug('catched signal, stopping...')
         r.value = 0
