@@ -1,4 +1,4 @@
-def recv_mmsg(stream, sock):
+def recv_mmsg(stream, sock, vlen=1000, bufsize=9000):
     import cffi
     ffi = cffi.FFI()
     ffi.cdef('''
@@ -32,14 +32,12 @@ def recv_mmsg(stream, sock):
         #include <sys/socket.h>
     ''', libraries=[])
     MSG_WAITFORONE = 0x10000
-    BUFSIZE = 9000
-    vlen = 1000
     msgs = ffi.new('struct mmsghdr[{}]'.format(vlen))
     iovecs = ffi.new('struct iovec[{}]'.format(vlen))
-    bufs = ffi.new('char[{}][{}]'.format(vlen, BUFSIZE))
+    bufs = ffi.new('char[{}][{}]'.format(vlen, bufsize))
     for i, iovec in enumerate(iovecs):
         iovec.iov_base = bufs[i]
-        iovec.iov_len = BUFSIZE
+        iovec.iov_len = bufsize
         msgs[i].msg_hdr.msg_iov = ffi.addressof(iovec)
         msgs[i].msg_hdr.msg_iovlen = 1
 
