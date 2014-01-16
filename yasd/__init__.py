@@ -1,6 +1,12 @@
 import logging
-import os
-from .recvmmsg import recv_mmsg
+try:
+    from .recvmmsg import recv_mmsg as recv
+except:
+    logging.warning('recvmmsg unavailable, using recv')
+    def recv(stream, sock, bufsize=9000, **kwargs):
+        for _ in stream:
+            yield sock.recv(bufsize)
+
 from . import stats
 
 def make_unix_sock(path, bufsize=65536, unlink=False):
@@ -23,10 +29,6 @@ def make_udp_sock(port=514, bufsize=65536):
     s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, bufsize)
     s.bind(('::', port))
     return s
-
-def recv(stream, sock, bufsize=9000):
-    for _ in stream:
-        yield sock.recv(bufsize)
 
 def send_stdout(stream, separator=b'\n'):
     import sys
@@ -206,7 +208,7 @@ def unix_to_elastic(receivers=1, senders=1):
     # echo f > /sys/class/net/eth0/queues/rx-0/rps_cpus
     x = produce(running=r)
     x = fork(x, processes=receivers)
-    x = recv_mmsg(x, s, vlen=100000)
+    x = recv(x, s, vlen=100000)
     x = count_messages(x, stats.Counter('messages_received'))
     x = send_logging(x, level=logging.TRACE)
     x = parse_syslog(x)
