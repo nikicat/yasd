@@ -1,21 +1,24 @@
 #!/usr/bin/env python
 
+import sys
 import logging
 import logging.handlers
+import yaml
 import yasd
 import yasd.stats
 
-def setup_logging():
-    logging.basicConfig(level=logging.DEBUG)
+def setup_logging(config):
+    logging.basicConfig(level=config['log-level'])
     handler = logging.handlers.SysLogHandler(address='/dev/log')
-    handler.setLevel(logging.INFO)
+    handler.setLevel(logging.INFO) # to avoid recursion
     handler.setFormatter(logging.Formatter('%(asctime)s yasd[%(process)d]: %(message)s', '%b %e %H:%M:%S'))
     logging.getLogger().addHandler(handler)
     #logging.getLogger('pyelasticsearch').setLevel(logging.DEBUG)
     logging.getLogger('graphitesend').setLevel(logging.INFO)
 
 if __name__ == '__main__':
-    setup_logging()
-    yasd.unix_to_elastic(elastics=['http://elastic{}.i.fog.yandex.net:9200/'.format(i) for i in range(4)])
-    yasd.stats.startsending('graphite-shard1', 2024)
+    config = yaml.load(sys.stdin)
+    setup_logging(config)
+    yasd.unix_to_elastic(elastics=config['elasticsearch'])
+    yasd.stats.startsending(config['graphite']['host'], config['graphite']['port'])
     logging.info('started')

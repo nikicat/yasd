@@ -1,0 +1,13 @@
+elasticsearch:
+  - http://elastic0.i.fog.yandex.net:9200
+  - http://elastic1.i.fog.yandex.net:9200
+  - http://elastic2.i.fog.yandex.net:9200
+  - http://elastic3.i.fog.yandex.net:9200
+  - http://node01d.elasticlog.yandex.net:9200
+  - http://node02d.elasticlog.yandex.net:9200
+
+graphite:
+  host: graphite-shard1.i.fog.yandex.net
+  port: 2024
+
+log-level: 20
