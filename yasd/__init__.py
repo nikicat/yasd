@@ -217,7 +217,6 @@ def unix_to_elastic(receivers=1, senders=1):
     x = send_logging(x, level=logging.TRACE)
     x = parse_syslog(x)
     x = parse_syslog_tag(x)
-    x = filter(lambda msg: msg['programname'] == b'trapper', x)
     x = parse_syslog_pri(x)
     x = decode(x, 'timestamp')
     x = parse_syslog_timestamp(x)
@@ -236,7 +235,7 @@ def unix_to_elastic(receivers=1, senders=1):
     y = send_logging(y, level=logging.TRACE)
     y = count_messages(y, 'messages_queued_to_es')
     y = group(y, count=10000, timefield='@timestamp')
-    y = send_es_bulk(y, index='debug-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', servers=['http://elastic{}:9200/'.format(i) for i in range(4)], timeout=600)
+    y = send_es_bulk(y, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', servers=['http://elastic{}:9200/'.format(i) for i in range(4)], timeout=600)
     consume_threaded(y)
 
     def handler(signal, frame):
