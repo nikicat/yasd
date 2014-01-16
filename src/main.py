@@ -3,14 +3,15 @@ import os
 from recvmmsg import recv_mmsg
 import stats
 
-def make_unix_sock(sockname, bufsize=65536, unlink=False):
+def make_unix_sock(path, bufsize=65536, unlink=False):
     import socket
     import os
-    if unlink:
-        os.remove(sockname)
+    import os.path
+    if unlink and os.path.exists(path):
+        os.remove(path)
     s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, bufsize)
-    s.bind(sockname)
+    s.bind(path)
     return s
 
 def make_udp_sock(port=514, bufsize=65536):
@@ -202,10 +203,11 @@ def recv_queue(stream, queue):
 def main():
     logging.basicConfig(level=logging.INFO)
     #logging.getLogger('pyelasticsearch').setLevel(logging.DEBUG)
-    logging.getLogger('graphitesend').setLevel(logging.DEBUG)
+    #logging.getLogger('graphitesend').setLevel(logging.DEBUG)
     logging.TRACE = 5
 
-    s = make_udp_sock(port=5514, bufsize=1024*1024*100)
+    #s = make_udp_sock(port=5514, bufsize=1024*1024*100)
+    s = make_unix_sock(path='log.socket', bufsize=1024*1024*100, unlink=True)
     q = make_queue(size=1024*1024*3)
     r = make_running()
     stats.Gauge('queue_size', q.qsize)
