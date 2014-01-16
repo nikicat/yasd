@@ -1,5 +1,6 @@
+import cffi
+
 def recv_mmsg(stream, sock, vlen=1000, bufsize=9000):
-    import cffi
     ffi = cffi.FFI()
     ffi.cdef('''
         typedef unsigned int socklen_t;
