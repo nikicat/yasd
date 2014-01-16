@@ -75,7 +75,8 @@ def parse_syslog_tag(stream):
     for msg in stream:
         match = tagre.match(msg['tag'])
         msg.update(match.groupdict())
-        msg['pid'] = int(msg['pid'])
+        if msg['pid'] is not None:
+            msg['pid'] = int(msg['pid'])
         yield msg
 
 def parse_syslog_timestamp(stream):
@@ -124,11 +125,11 @@ def group(stream, count=100000, timeout=10, timefield='timestamp'):
     msgs = []
     start = time.time()
     for msg in stream:
+        msgs.append(msg)
         if len(msgs) > 0 and (len(msgs) == count or time.time() - start > timeout or msg[timefield].date() != msgs[-1][timefield].date()):
             yield msgs
             msgs = []
             start = time.time()
-        msgs.append(msg)
 
 def gen_uuid(stream):
     import uuid
@@ -139,10 +140,8 @@ def gen_uuid(stream):
 def send_es_bulk(stream, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', type='events', servers='http://localhost:9200/', timeout=30):
     import pyelasticsearch
     conn = pyelasticsearch.ElasticSearch(servers, timeout=timeout, max_retries=4)
-    sent = stats.Counter('sent_to_es')
     for msgs in stream:
         conn.bulk_index(index.format(**msgs[0]), type, msgs, consistency="one")
-        sent += len(msgs)
         yield msgs
 
 def produce(running):
@@ -165,15 +164,10 @@ def fork(stream, processes):
     for pid in pids:
         os.waitpid(pid, 0)
 
-def count_messages(stream, name):
-    count = stats.Counter(name)
+def count_messages(stream, counter, delta=lambda x: 1):
     for msg in stream:
-        count += 1
+        counter += delta(msg)
         yield msg
-
-def send_stats(stream, graphite_server, graphite_port, prefix):
-    stats.startsending(server=graphite_server, port=graphite_port, prefix='{}{}'.format(prefix, fork.workernum))
-    yield from stream
 
 def make_running():
     import multiprocessing
@@ -211,10 +205,9 @@ def unix_to_elastic(receivers=1, senders=1):
     # dont forget to enable packet steering, like
     # echo f > /sys/class/net/eth0/queues/rx-0/rps_cpus
     x = produce(running=r)
-    x = send_stats(x, 'graphite-shard1', 2024, 'receiver')
     x = fork(x, processes=receivers)
     x = recv_mmsg(x, s, vlen=100000)
-    x = count_messages(x, 'messages_received')
+    x = count_messages(x, stats.Counter('messages_received'))
     x = send_logging(x, level=logging.TRACE)
     x = parse_syslog(x)
     x = parse_syslog_tag(x)
@@ -226,18 +219,20 @@ def unix_to_elastic(receivers=1, senders=1):
     x = rename(x, {'timestamp': '@timestamp', 'uuid': 'id'})
     x = send_logging(x, level=logging.TRACE)
     x = send_queue(x, q)
-    x = count_messages(x, 'messages_queued')
+    x = count_messages(x, stats.Counter('messages_enqueued'))
     consume_threaded(x)
 
     y = produce(running=r)
-    y = send_stats(y, 'graphite-shard1', 2024, 'sender')
     y = fork(y, processes=senders)
     y = recv_queue(y, q)
+    x = count_messages(x, stats.Counter('messages_dequeued'))
     y = send_logging(y, level=logging.TRACE)
-    y = count_messages(y, 'messages_queued_to_es')
-    y = group(y, count=10000, timefield='@timestamp')
+    y = group(y, count=1, timefield='@timestamp')
     y = send_es_bulk(y, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', servers=['http://elastic{}:9200/'.format(i) for i in range(4)], timeout=600)
+    y = count_messages(y, stats.Counter('messages_sent'), delta=lambda x: len(x))
     consume_threaded(y)
+
+    stats.startsending('graphite-shard1', 2024)
 
     def handler(signal, frame):
         logging.debug('catched signal, stopping...')
