@@ -92,16 +92,19 @@ def parse_syslog_tag(stream):
 def parse_syslog_timestamp(stream):
     import datetime
     import functools
+    import dateutil.tz
+    tzlocal = dateutil.tz.tzlocal()
+    tzutc = dateutil.tz.tzutc()
     @functools.lru_cache(maxsize=10)
     def parse(timestamp):
-        return datetime.datetime.strptime(timestamp, '%b %d %H:%M:%S').replace(year=datetime.datetime.now().year)
+        return datetime.datetime.strptime(timestamp, '%b %d %H:%M:%S').replace(year=datetime.datetime.now().year, tzinfo=tzlocal).astimezone(tzutc)
 
     for msg in stream:
         try:
             msg['timestamp'] = parse(msg['timestamp'])
         except:
             logging.warning('failed to parse syslog timestamp, using current time', exc_info=True)
-            msg['timestamp'] = datetime.datetime.now()
+            msg['timestamp'] = datetime.datetime.utcnow()
         yield msg
 
 def consume(stream):
