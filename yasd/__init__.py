@@ -225,7 +225,7 @@ def unix_to_elastic(receivers=1, senders=1):
     y = produce(running=r)
     y = fork(y, processes=senders)
     y = recv_queue(y, q)
-    x = count_messages(x, stats.Counter('messages_dequeued'))
+    y = count_messages(y, stats.Counter('messages_dequeued'))
     y = send_logging(y, level=logging.TRACE)
     y = group(y, count=1, timefield='@timestamp')
     y = send_es_bulk(y, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', servers=['http://elastic{}:9200/'.format(i) for i in range(4)], timeout=600)
