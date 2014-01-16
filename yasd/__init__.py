@@ -54,31 +54,39 @@ def parse_syslog(stream):
     syslogre = re.compile(b'^<(?P<pri>[0-9]{1,3})>(?P<timestamp>[A-Z][a-z]{2} [ 0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}) (?P<tag>[^:]+): (?P<msg>.*)$')
     SyslogEntry = collections.namedtuple('SyslogEntry', ['pri', 'timestamp', 'tag', 'msg'])
     for msg in stream:
-        match = syslogre.match(msg)
-        if match is None:
-            raise Exception('failed to parse syslog string')
-        entry = match.groupdict()
-        yield entry
+        try:
+            match = syslogre.match(msg)
+            msg = match.groupdict()
+        except:
+            logging.warning('failed to parse syslog string, passing whole msg', exc_info=True)
+            msg = {'msg': msg}
+        yield msg
 
 def parse_syslog_pri(stream):
     severities = ['emergency', 'alert', 'critical', 'error', 'warning', 'notice', 'info', 'debug']
     facilities = ['kernel', 'user', 'mail', 'daemon', 'auth', 'syslog', 'printer', 'nntp', 'uucp', 'clock', 'audit', 'ftp', 'ntp', 'audit', 'alert', 'cron', 'local0', 'local1', 'local2', 'local3', 'local4', 'local5', 'local6', 'local7']
     for msg in stream:
-        pri = msg['pri'] = int(msg['pri'])
-        msg['severity'] = severity = pri % 8
-        msg['facility'] = facility = pri // 8
-        msg['severity-text'] = severities[severity]
-        msg['facility-text'] = facilities[facility]
+        try:
+            pri = msg['pri'] = int(msg['pri'])
+            msg['severity'] = severity = pri % 8
+            msg['facility'] = facility = pri // 8
+            msg['severity-text'] = severities[severity]
+            msg['facility-text'] = facilities[facility]
+        except:
+            logging.warning('failed to parse syslog pri', exc_info=True)
         yield msg
 
 def parse_syslog_tag(stream):
     import re
     tagre = re.compile(b'(?P<host>[^ ]+) (?P<programname>[^\[]+)(?:\[(?P<pid>[0-9]+)\])?') 
     for msg in stream:
-        match = tagre.match(msg['tag'])
-        msg.update(match.groupdict())
-        if msg['pid'] is not None:
-            msg['pid'] = int(msg['pid'])
+        try:
+            match = tagre.match(msg['tag'])
+            msg.update(match.groupdict())
+            if msg['pid'] is not None:
+                msg['pid'] = int(msg['pid'])
+        except:
+            logging.warning('failed to parse syslog tag', exc_info=True)
         yield msg
 
 def parse_syslog_timestamp(stream):
@@ -89,7 +97,11 @@ def parse_syslog_timestamp(stream):
         return datetime.datetime.strptime(timestamp, '%b %d %H:%M:%S').replace(year=datetime.datetime.now().year)
 
     for msg in stream:
-        msg['timestamp'] = parse(msg['timestamp'])
+        try:
+            msg['timestamp'] = parse(msg['timestamp'])
+        except:
+            logging.warning('failed to parse syslog timestamp, using current time', exc_info=True)
+            msg['timestamp'] = datetime.datetime.now()
         yield msg
 
 def consume(stream):
@@ -111,8 +123,11 @@ def consume_threaded(stream, workers=1):
 def rename(stream, renames):
     for msg in stream:
         for k,v in renames.items():
-            msg[v] = msg[k]
-            del msg[k]
+            try:
+                msg[v] = msg[k]
+                del msg[k]
+            except:
+                logging.warning('failed to rename "{k}" to "{v}"'.format(k=k, v=v), exc_info=True)
         yield msg
 
 def send_es(stream, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', type='events', servers='http://localhost:9200/', timeout=10):
@@ -177,7 +192,10 @@ def make_running():
 
 def decode(stream, field):
     for msg in stream:
-        msg[field] = msg[field].decode(errors='ignore')
+        try:
+            msg[field] = msg[field].decode(errors='ignore')
+        except:
+            logging.warning('failed to decode field "{}"'.format(field), exc_info=True)
         yield msg
 
 def make_queue(size=1024):
