@@ -215,7 +215,9 @@ def recv_queue(stream, queue):
         if msg:
             yield msg
 
-def unix_to_elastic(receivers=1, senders=1):
+def unix_to_elastic(elastics, receivers=1, senders=1):
+    logging.TRACE = 5
+
     s = make_unix_sock(path='log.socket', bufsize=1024*1024*100, unlink=True)
     q = make_queue(size=1024*1024*3)
     r = make_running()
@@ -248,11 +250,9 @@ def unix_to_elastic(receivers=1, senders=1):
     y = count_messages(y, stats.Counter('messages_dequeued'))
     y = send_logging(y, level=logging.TRACE)
     y = group(y, count=1, timefield='@timestamp')
-    y = send_es_bulk(y, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', servers=['http://elastic{}:9200/'.format(i) for i in range(4)], timeout=600)
+    y = send_es_bulk(y, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', servers=elastics, timeout=600)
     y = count_messages(y, stats.Counter('messages_sent'), delta=lambda x: len(x))
     consume_threaded(y)
-
-    stats.startsending('graphite-shard1', 2024)
 
     def handler(signal, frame):
         logging.debug('catched signal, stopping...')

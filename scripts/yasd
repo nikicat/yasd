@@ -3,8 +3,9 @@
 import logging
 import logging.handlers
 import yasd
+import yasd.stats
 
-if __name__ == '__main__':
+def setup_logging():
     logging.basicConfig(level=logging.DEBUG)
     handler = logging.handlers.SysLogHandler(address='/dev/log')
     handler.setLevel(logging.INFO)
@@ -12,6 +13,9 @@ if __name__ == '__main__':
     logging.getLogger().addHandler(handler)
     #logging.getLogger('pyelasticsearch').setLevel(logging.DEBUG)
     logging.getLogger('graphitesend').setLevel(logging.INFO)
-    logging.TRACE = 5
-    yasd.unix_to_elastic()
+
+if __name__ == '__main__':
+    setup_logging()
+    yasd.unix_to_elastic(elastics=['http://elastic{}.i.fog.yandex.net:9200/'.format(i) for i in range(4)])
+    yasd.stats.startsending('graphite-shard1', 2024)
     logging.info('started')
