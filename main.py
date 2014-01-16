@@ -137,17 +137,17 @@ def gen_uuid(stream):
 def send_es_bulk(stream, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', type='events', servers='http://localhost:9200/', timeout=30):
     import pyelasticsearch
     conn = pyelasticsearch.ElasticSearch(servers, timeout=timeout, max_retries=4)
+    sent = stats.Counter('sent_to_es')
     for msgs in stream:
         conn.bulk_index(index.format(**msgs[0]), type, msgs, consistency="one")
+        sent += len(msgs)
         yield msgs
 
 def produce(running):
-    logging.debug('producer started')
     while running.value:
         yield None
-    logging.debug('producer finished')
 
-def produce_forked(processes, running):
+def fork(stream, processes):
     import os
     import random
     pids = []
@@ -155,12 +155,23 @@ def produce_forked(processes, running):
         pid = os.fork()
         if pid == 0:
             random.seed()
-            yield from produce(running)
+            fork.workernum = i
+            yield from stream
             return
         else:
             pids.append(pid)
     for pid in pids:
         os.waitpid(pid, 0)
+
+def count_messages(stream, name):
+    count = stats.Counter(name)
+    for msg in stream:
+        count += 1
+        yield msg
+
+def send_stats(stream, graphite_server, graphite_port, prefix):
+    stats.startsending(server=graphite_server, port=graphite_port, prefix='{}{}'.format(prefix, fork.workernum))
+    yield from stream
 
 def make_running():
     import multiprocessing
@@ -195,13 +206,19 @@ def main():
     logging.TRACE = 5
 
     s = make_udp_sock(port=5514, bufsize=1024*1024*100)
-    q = make_queue(size=1024*1024*50)
+    q = make_queue(size=1024*1024*3)
     r = make_running()
-    stats.getstat('queue_size').value = q.qsize
+    stats.Gauge('queue_size', q.qsize)
+    stats.create_system_counters()
 
-    x = produce_forked(processes=4, running=r)
+    # dont forget to enable packet steering, like
+    # echo f > /sys/class/net/eth0/queues/rx-0/rps_cpus
+    x = produce(running=r)
+    x = send_stats(x, 'graphite-shard1', 2024, 'receiver')
+    x = fork(x, processes=4)
     #x = produce(running=r)
     x = recv_mmsg(x, s, vlen=100000)
+    x = count_messages(x, 'messages_received')
     x = send_logging(x, level=logging.TRACE)
     x = parse_syslog(x)
     x = parse_syslog_tag(x)
@@ -214,17 +231,18 @@ def main():
     x = rename(x, {'timestamp': '@timestamp', 'uuid': 'id'})
     x = send_logging(x, level=logging.TRACE)
     x = send_queue(x, q)
+    x = count_messages(x, 'messages_queued')
     consume_threaded(x)
 
-    y = produce_forked(processes=1, running=r)
+    y = produce(running=r)
+    y = send_stats(y, 'graphite-shard1', 2024, 'sender')
+    y = fork(y, processes=4)
     y = recv_queue(y, q)
     y = send_logging(y, level=logging.TRACE)
+    y = count_messages(y, 'messages_queued_to_es')
     y = group(y, count=10000, timefield='@timestamp')
     y = send_es_bulk(y, index='debug-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', servers=['http://elastic{}:9200/'.format(i) for i in range(4)], timeout=600)
-    
     consume_threaded(y)
-    
-    stats.startsending('graphite-shard1', 2024)
 
     def handler(signal, frame):
         logging.debug('catched signal, stopping...')
