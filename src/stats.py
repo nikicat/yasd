@@ -1,5 +1,5 @@
 import multiprocessing
-import procstat
+from . import procstat
 
 _stats = {}
 

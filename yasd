@@ -1,0 +1,12 @@
+#!/usr/bin/env python
+
+import logging
+import yasd
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+    #logging.getLogger('pyelasticsearch').setLevel(logging.DEBUG)
+    #logging.getLogger('graphitesend').setLevel(logging.DEBUG)
+    logging.TRACE = 5
+    yasd.unix_to_elastic()
+    logging.info('done initialization, main thread exiting')

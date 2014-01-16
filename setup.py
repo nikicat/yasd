@@ -10,5 +10,6 @@ setup(name='yasd',
       url='https://github.com/nikicat/yasd',
       packages=['yasd'],
       package_dir={'yasd': 'src'},
-      requires=['cffi', 'pyelasticsearch']
+      requires=['cffi', 'pyelasticsearch'],
+      scripts=['yasd']
      )
