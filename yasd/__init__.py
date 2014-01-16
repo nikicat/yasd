@@ -12,6 +12,7 @@ def make_unix_sock(path, bufsize=65536, unlink=False):
     s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, bufsize)
     s.bind(path)
+    os.chmod(path, 0o777)
     return s
 
 def make_udp_sock(port=514, bufsize=65536):
