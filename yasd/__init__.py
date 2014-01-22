@@ -58,7 +58,7 @@ def parse_syslog(stream):
             match = syslogre.match(msg)
             msg = match.groupdict()
         except:
-            logging.warning('failed to parse syslog string, passing whole msg', exc_info=True)
+            logging.warning('failed to parse syslog string, passing whole msg "{}"'.format(msg), exc_info=True)
             msg = {'msg': msg}
         yield msg
 
