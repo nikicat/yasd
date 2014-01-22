@@ -21,13 +21,13 @@ def make_unix_sock(path, bufsize=65536, unlink=False):
     os.chmod(path, 0o777)
     return s
 
-def make_udp_sock(port=514, bufsize=65536):
+def make_udp_sock(bindaddr, bufsize=65536):
     import socket
     s = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
     # dont forget to set net.core.rmem_max to equal or greater value
     # linux supports SO_RCVBUFFORCE, but it requires CAP_NET_ADMIN privilege
     s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, bufsize)
-    s.bind(('::', port))
+    s.bind(bindaddr)
     return s
 
 def send_stdout(stream, separator=b'\n'):
@@ -218,11 +218,15 @@ def recv_queue(stream, queue):
         if msg:
             yield msg
 
-def unix_to_elastic(elastics, receivers=1, senders=1):
+def syslog_to_elastic(bindaddr, elasticurls, elasticindex, receivers=1, senders=1, bufsize=1024*1024*100, bulksize=1, queuesize=1024*1024*10):
     logging.TRACE = 5
 
-    s = make_unix_sock(path='log.socket', bufsize=1024*1024*100, unlink=True)
-    q = make_queue(size=1024*1024*3)
+    if isinstance(bindaddr, str):
+        s = make_unix_sock(bindaddr, bufsize=bufsize, unlink=True)
+    else:
+        s = make_udp_sock(bindaddr, bufsize=bufsize)
+
+    q = make_queue(size=queuesize)
     r = make_running()
     stats.Gauge('queue_size', q.qsize)
     stats.create_system_counters()
@@ -252,8 +256,8 @@ def unix_to_elastic(elastics, receivers=1, senders=1):
     y = recv_queue(y, q)
     y = count_messages(y, stats.Counter('messages_dequeued'))
     y = send_logging(y, level=logging.TRACE)
-    y = group(y, count=1, timefield='@timestamp')
-    y = send_es_bulk(y, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', servers=elastics, timeout=600)
+    y = group(y, count=bulksize, timefield='@timestamp')
+    y = send_es_bulk(y, index=elasticindex, servers=elasticurls, timeout=600)
     y = count_messages(y, stats.Counter('messages_sent'), delta=lambda x: len(x))
     consume_threaded(y)
 

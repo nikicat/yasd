@@ -35,12 +35,10 @@ class Counter:
             self._value.value -= other
         return self
 
-def startsending(server, port=2004, period=5, prefix=''):
+def startsending(server, port=2004, period=5, group='yasd'):
     import socket
     import graphitesend
-    if not prefix.startswith('.'):
-        prefix = '.'+prefix
-    client = graphitesend.GraphiteClient(prefix='servers', graphite_server=server, graphite_port=port, group='yasd{}'.format(prefix))
+    client = graphitesend.GraphiteClient(prefix='servers', graphite_server=server, graphite_port=port, group=group)
     def send():
         import time
         while True:

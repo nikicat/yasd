@@ -1,13 +1,30 @@
+#bind-address: log.socket
+bind-address: !!python/tuple ["::", 5514]
+
+#receivers: 1
+receivers: 4
+
+#senders: 1
+senders: 8
+
+queue-size: 1000000
+
 elasticsearch:
-  - http://elastic0.i.fog.yandex.net:9200
-  - http://elastic1.i.fog.yandex.net:9200
-  - http://elastic2.i.fog.yandex.net:9200
-  - http://elastic3.i.fog.yandex.net:9200
-  - http://node01d.elasticlog.yandex.net:9200
-  - http://node02d.elasticlog.yandex.net:9200
+  urls:
+      - http://elastic0.i.fog.yandex.net:9200
+      - http://elastic1.i.fog.yandex.net:9200
+      - http://node01d.elasticlog.yandex.net:9200
+      - http://node02d.elasticlog.yandex.net:9200
+
+  #bulksize: 1
+  bulksize: 10000
+
+  #index: log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}
+  index: debug-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}
 
 graphite:
   host: graphite-shard1.i.fog.yandex.net
   port: 2024
+  group: 'yasd-zbx'
 
 log-level: 20

@@ -19,6 +19,6 @@ def setup_logging(config):
 if __name__ == '__main__':
     config = yaml.load(sys.stdin)
     setup_logging(config)
-    yasd.unix_to_elastic(elastics=config['elasticsearch'])
-    yasd.stats.startsending(config['graphite']['host'], config['graphite']['port'])
+    yasd.syslog_to_elastic(bindaddr=config['bind-address'], elasticurls=config['elasticsearch']['urls'], bulksize=config['elasticsearch']['bulksize'], receivers=config['receivers'], senders=config['senders'], elasticindex=config['elasticsearch']['index'], queuesize=config['queue-size'])
+    yasd.stats.startsending(config['graphite']['host'], config['graphite']['port'], group=config['graphite']['group'])
     logging.info('started')
