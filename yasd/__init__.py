@@ -1,4 +1,7 @@
 import logging
+
+logger = logging.getLogger('yasd')
+
 try:
     from .recvmmsg import recv_mmsg as recv
 except:
@@ -43,22 +46,22 @@ def send_print(stream):
         print(msg)
         yield msg
 
-def send_logging(stream, level=logging.DEBUG):
+def send_logging(stream, level=logging.DEBUG, logger=logging.getLogger('yasd.dump')):
     for msg in stream:
-        logging.log(level, msg)
+        logger.log(level, msg)
         yield msg
 
 def parse_syslog(stream):
     import re
     import collections
-    syslogre = re.compile(b'^<(?P<pri>[0-9]{1,3})>(?P<timestamp>[A-Z][a-z]{2} [ 0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}) (?P<tag>[^:]+): (?P<msg>.*)$')
+    syslogre = re.compile(b'^<(?P<pri>[0-9]{1,3})>(?P<timestamp>[A-Z][a-z]{2} [ 0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}) (?P<tag>[^:]+): (?P<msg>.*)$', re.MULTILINE|re.DOTALL)
     SyslogEntry = collections.namedtuple('SyslogEntry', ['pri', 'timestamp', 'tag', 'msg'])
     for msg in stream:
         try:
             match = syslogre.match(msg)
             msg = match.groupdict()
         except:
-            logging.warning('failed to parse syslog string, passing whole msg "{}"'.format(msg), exc_info=True)
+            logger.warning('failed to parse syslog string, passing whole msg "{}"'.format(msg), exc_info=True)
             msg = {'msg': msg}
         yield msg
 
@@ -73,7 +76,7 @@ def parse_syslog_pri(stream):
             msg['severity-text'] = severities[severity]
             msg['facility-text'] = facilities[facility]
         except:
-            logging.warning('failed to parse syslog pri', exc_info=True)
+            logger.warning('failed to parse syslog pri', exc_info=True)
         yield msg
 
 def parse_syslog_tag(stream):
@@ -86,7 +89,7 @@ def parse_syslog_tag(stream):
             if msg['pid'] is not None:
                 msg['pid'] = int(msg['pid'])
         except:
-            logging.warning('failed to parse syslog tag', exc_info=True)
+            logger.warning('failed to parse syslog tag', exc_info=True)
         yield msg
 
 def parse_syslog_timestamp(stream):
@@ -103,7 +106,7 @@ def parse_syslog_timestamp(stream):
         try:
             msg['timestamp'] = parse(msg['timestamp'])
         except:
-            logging.warning('failed to parse syslog timestamp, using current time', exc_info=True)
+            logger.warning('failed to parse syslog timestamp, using current time', exc_info=True)
             msg['timestamp'] = datetime.datetime.utcnow()
         yield msg
 
@@ -130,7 +133,7 @@ def rename(stream, renames):
                 msg[v] = msg[k]
                 del msg[k]
             except:
-                logging.warning('failed to rename "{k}" to "{v}"'.format(k=k, v=v), exc_info=True)
+                logger.warning('failed to rename "{k}" to "{v}"'.format(k=k, v=v), exc_info=True)
         yield msg
 
 def send_es(stream, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', type='events', servers='http://localhost:9200/', timeout=10):
@@ -198,7 +201,7 @@ def decode(stream, field):
         try:
             msg[field] = msg[field].decode(errors='ignore')
         except:
-            logging.warning('failed to decode field "{}"'.format(field), exc_info=True)
+            logger.warning('failed to decode field "{}"'.format(field), exc_info=True)
         yield msg
 
 def make_queue(size=1024):
