@@ -92,11 +92,11 @@ def parse_syslog_tag(stream):
             logger.warning('failed to parse syslog tag', exc_info=True)
         yield msg
 
-def parse_syslog_timestamp(stream):
+def parse_syslog_timestamp(stream, timezone=None):
     import datetime
     import functools
     import dateutil.tz
-    tzlocal = dateutil.tz.tzlocal()
+    tzlocal = dateutil.tz.gettz(timezone)
     tzutc = dateutil.tz.tzutc()
     @functools.lru_cache(maxsize=10)
     def parse(timestamp):
@@ -221,7 +221,7 @@ def recv_queue(stream, queue):
         if msg:
             yield msg
 
-def syslog_to_elastic(bindaddr, elasticurls, elasticindex, receivers=1, senders=1, bufsize=1024*1024*100, bulksize=1, queuesize=1024*1024*10):
+def syslog_to_elastic(bindaddr, elasticurls, elasticindex, receivers=1, senders=1, bufsize=1024*1024*100, bulksize=1, queuesize=1024*1024*10, timezone=None):
     logging.TRACE = 5
 
     if isinstance(bindaddr, str):
@@ -245,7 +245,7 @@ def syslog_to_elastic(bindaddr, elasticurls, elasticindex, receivers=1, senders=
     x = parse_syslog_tag(x)
     x = parse_syslog_pri(x)
     x = decode(x, 'timestamp')
-    x = parse_syslog_timestamp(x)
+    x = parse_syslog_timestamp(x, timezone=timezone)
     x = decode(x, 'msg')
     x = gen_uuid(x)
     x = rename(x, {'timestamp': '@timestamp', 'uuid': 'id'})

@@ -1,6 +1,8 @@
 #bind-address: log.socket
 bind-address: !!python/tuple ["::", 5514]
 
+timezone: Europe/Moscow
+
 #receivers: 1
 receivers: 4
 
@@ -23,7 +25,8 @@ elasticsearch:
   index: debug-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}
 
 graphite:
-  host: graphite-shard1.i.fog.yandex.net
+  #host: graphite-shard1.i.fog.yandex.net
+  host: graphite-test01e.yandex.net
   port: 2024
   group: yasd-zbx
 
