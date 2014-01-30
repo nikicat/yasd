@@ -10,6 +10,6 @@ import yasd.stats
 if __name__ == '__main__':
     config = yaml.load(sys.stdin)
     logging.config.dictConfig(config['logging'])
-    yasd.syslog_to_elastic(bindaddr=config['bind-address'], elasticurls=config['elasticsearch']['urls'], bulksize=config['elasticsearch']['bulksize'], receivers=config['receivers'], senders=config['senders'], elasticindex=config['elasticsearch']['index'], queuesize=config['queue-size'], timezone=config['timezone'])
+    yasd.syslog_to_elastic(bindaddr=config['bind-address'], elasticurls=config['elasticsearch']['urls'], bulksize=config['elasticsearch']['bulksize'], receivers=config['receivers'], senders=config['senders'], elasticindex=config['elasticsearch']['index'], queuesize=config['queue-size'], timezone=config.get('timezone'))
     yasd.stats.startsending(config['graphite']['host'], config['graphite']['port'], group=config['graphite']['group'])
     logging.info('started')
