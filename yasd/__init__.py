@@ -138,7 +138,7 @@ def rename(stream, renames):
 
 def send_es(stream, index='log-{@timestamp:%Y}-{@timestamp:%m}-{@timestamp:%d}', type='events', servers='http://localhost:9200/', timeout=10):
     import pyelasticsearch
-    conn = pyelasticsearch.ElasticSearch(servers, timeout=timeout)
+    conn = pyelasticsearch.ElasticSearch(servers, timeout=timeout, max_retries=9999999999)
     for msg in stream:
         conn.index(index.format(**msg), type, msg)
         yield msg
